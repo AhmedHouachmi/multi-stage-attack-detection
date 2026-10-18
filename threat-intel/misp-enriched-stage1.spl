@@ -1,0 +1,12 @@
+`````
+`````Stage 1 detection enriched with MISP indicators via a CSV lookup```
+index=main sourcetype=auth-* "Failed password"
+| rex field=_raw "Failed password for (invalid user )?(?<user>\S+) from (?<src_ip>\S+)"
+| bin _time span=2m
+| stats count as attempts by src_ip, user, _time
+| where attempts >= 5
+| lookup misp_indicators.csv value AS src_ip OUTPUT type AS misp_type, category AS misp_category, to_ids AS misp_to_ids
+| eval threat_intel_match=if(isnotnull(misp_type), "KNOWN THREAT ACTOR (MISP match)", "unknown source")
+| eval attack_stage="1_initial_access", mitre_technique="T1110"
+| table _time src_ip user attempts threat_intel_match misp_category attack_stage mitre_technique
+`````
