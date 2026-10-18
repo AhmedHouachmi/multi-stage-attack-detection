@@ -1,0 +1,9 @@
+``````
+``````Stage 2 - Privilege Escalation (sudo to root) - MITRE ATT&CK T1548.003```
+`````uid!=0 excludes root's own sessions, which are not escalations (tuning fix)```
+index=main sourcetype=auth-* "session opened for user root"
+| rex field=_raw "for user root\(uid=0\) by (?<user>\S+)\(uid=(?<uid>\d+)\)"
+| where uid!=0
+| eval attack_stage="2_privilege_escalation", mitre_technique="T1548.003", severity="medium"
+| table _time user uid attack_stage mitre_technique severity
+`````
