@@ -1,0 +1,29 @@
+``````
+``````Multi-stage correlation + MISP enrichment```
+`````Merges the 4 detections, buckets events into 2-hour windows, and declares an incident when 3+ distinct stages appear```
+````Requires the lookup file misp_indicators.csv (columns: value, type)```
+| multisearch
+[ search index=main sourcetype=auth-* "Failed password"
+  | rex field=_raw "Failed password for (invalid user )?(?<user>\S+) from (?<src_ip>\S+)"
+  | eval attack_stage="1_initial_access", mitre_technique="T1110" ]
+[ search index=main sourcetype=auth-* "session opened for user root"
+  | rex field=_raw "for user root\(uid=0\) by (?<user>\S+)\(uid=(?<uid>\d+)\)"
+  | where uid!=0
+  | eval attack_stage="2_privilege_escalation", mitre_technique="T1548.003" ]
+[ search index=main sourcetype=auth-* "session opened for user" "su["
+  | rex field=_raw "session opened for user (?<target_user>\S+)\(uid=(?<target_uid>\d+)\) by (?<user>\S+)\(uid=(?<source_uid>\d+)\)"
+  | where source_uid=0 AND target_uid!=0
+  | eval attack_stage="3_lateral_movement", mitre_technique="T1078" ]
+[ search index=main sourcetype=linux_audit type=SYSCALL (key="curl_exec" OR key="sensitive_file_access")
+  | rex field=_raw "AUID=\"(?<user>\S+)\""
+  | eval attack_stage="4_exfiltration", mitre_technique="T1041" ]
+| lookup misp_indicators.csv value AS src_ip OUTPUT type AS misp_type
+| bin _time span=2h as incident_window
+| stats dc(attack_stage) as stages_seen values(attack_stage) as chain earliest(_time) as incident_start latest(_time) as incident_end values(src_ip) as source_ips values(misp_type) as misp_matches by incident_window
+| where stages_seen >= 3
+| eval incident_duration_sec = incident_end - incident_start
+| eval incident_start = strftime(incident_start, "%Y-%m-%d %H:%M:%S")
+| eval incident_end = strftime(incident_end, "%Y-%m-%d %H:%M:%S")
+| eval threat_intel_summary = if(isnotnull(misp_matches), "KNOWN THREAT ACTOR INVOLVED", "no known threat intel match")
+| table incident_start incident_end incident_duration_sec chain stages_seen source_ips threat_intel_summary
+````
