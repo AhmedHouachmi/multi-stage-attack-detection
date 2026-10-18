@@ -1,0 +1,11 @@
+``````
+``````Stage 4 - Exfiltration (host-based, auditd) - MITRE ATT&CK T1041```
+`````Alert only when BOTH audit keys (file read + curl execution) hit for the same user within 1 minute```
+index=main sourcetype=linux_audit type=SYSCALL (key="curl_exec" OR key="sensitive_file_access")
+| rex field=_raw "AUID=\"(?<user>\S+)\""
+| bin _time span=1m
+| stats dc(key) as distinct_events values(key) as events by user, _time
+| where distinct_events=2
+| eval attack_stage="4_exfiltration", mitre_technique="T1041", severity="critical"
+| table _time user events attack_stage mitre_technique severity
+`````
