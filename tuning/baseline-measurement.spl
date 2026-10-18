@@ -1,0 +1,29 @@
+`````
+`````Alert-volume baseline: raw alerts per stage plus a total row```
+````Run it without the uid!=0 filter on Stage 2 (207 total), then with it (164 total), to measure the tuning impact```
+index=main sourcetype=auth-* "Failed password"
+| rex field=_raw "Failed password for (invalid user )?(?<user>\S+) from (?<src_ip>\S+)"
+| bin _time span=2m
+| stats count as attempts by src_ip, user, _time
+| where attempts >= 5
+| eval attack_stage="1_initial_access"
+| stats count as alerts by attack_stage
+| append
+    [ search index=main sourcetype=auth-* "session opened for user root"
+      | rex field=_raw "for user root\(uid=0\) by (?<user>\S+)\(uid=(?<uid>\d+)\)"
+      | where uid!=0
+      | eval attack_stage="2_privilege_escalation"
+      | stats count as alerts by attack_stage ]
+| append
+    [ search index=main sourcetype=auth-* "session opened for user" "su["
+      | rex field=_raw "session opened for user (?<target_user>\S+)\(uid=(?<target_uid>\d+)\) by (?<user>\S+)\(uid=(?<source_uid>\d+)\)"
+      | where source_uid=0 AND target_uid!=0
+      | eval attack_stage="3_lateral_movement"
+      | stats count as alerts by attack_stage ]
+| append
+    [ search index=main sourcetype=linux_audit type=SYSCALL (key="curl_exec" OR key="sensitive_file_access")
+      | rex field=_raw "AUID=\"(?<user>\S+)\""
+      | eval attack_stage="4_exfiltration"
+      | stats count as alerts by attack_stage ]
+| addcoltotals labelfield=attack_stage label="TOTAL (raw, per-stage)"
+````
