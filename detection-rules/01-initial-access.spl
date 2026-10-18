@@ -1,0 +1,10 @@
+``````Stage 1 - Initial Access (SSH brute force) - MITRE ATT&CK T1110```
+`````Flags any source IP with 5+ failed SSH logins inside a 2-minute window```
+index=main sourcetype=auth-* "Failed password"
+| rex field=_raw "Failed password for (invalid user )?(?<user>\S+) from (?<src_ip>\S+)"
+| bin _time span=2m
+| stats count as attempts by src_ip, user, _time
+| where attempts >= 5
+| eval attack_stage="1_initial_access", mitre_technique="T1110", severity="medium"
+| table _time src_ip user attempts attack_stage mitre_technique severity
+`````
