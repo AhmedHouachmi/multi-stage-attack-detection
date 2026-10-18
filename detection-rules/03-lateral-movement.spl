@@ -1,0 +1,9 @@
+``````
+``````Stage 3 - Lateral Movement (root pivots to another account via su) - MITRE ATT&CK T1078```
+`````Simplified lab: the pivot targets a second local account standing in for a second host```
+index=main sourcetype=auth-* "session opened for user" "su["
+| rex field=_raw "session opened for user (?<target_user>\S+)\(uid=(?<target_uid>\d+)\) by (?<source_user>\S+)\(uid=(?<source_uid>\d+)\)"
+| where source_uid=0 AND target_uid!=0
+| eval attack_stage="3_lateral_movement", mitre_technique="T1078", severity="high"
+| table _time source_user target_user attack_stage mitre_technique severity
+`````
